@@ -4,14 +4,14 @@ import YouTube from "react-youtube";
 
 export default function CaptionPlayer({ blobUrl, audioPath, videoId }) {
   const mediaRef = useRef(null);
-  const wsRef = useRef(null);
   const playerRef = useRef(null);
+  const wsRef = useRef(null);
 
   const [segments, setSegments] = useState([]);
   const [currentCaption, setCurrentCaption] = useState("");
+  const [readyToPlay, setReadyToPlay] = useState(false);
 
-  // Determine playback type
-  const isYouTube = !!videoId; // TRUE if YouTube link was used
+  const isYouTube = !!videoId;
 
   // ---- Connect WebSocket WHEN audioPath is available ----
   useEffect(() => {
@@ -21,6 +21,7 @@ export default function CaptionPlayer({ blobUrl, audioPath, videoId }) {
     wsRef.current = ws;
     setSegments([]);
     setCurrentCaption("");
+    setReadyToPlay(false); // reset state on new media
 
     ws.onopen = () => {
       ws.send(JSON.stringify({ audio_path: audioPath }));
@@ -39,7 +40,16 @@ export default function CaptionPlayer({ blobUrl, audioPath, videoId }) {
         return;
       }
 
-      setSegments((prev) => [...prev, data]);
+      setSegments((prev) => {
+        const updated = [...prev, data];
+
+        // ⭐ BUFFER LOGIC: Wait until 3 chunks
+        if (updated.length >= 3) {
+          setReadyToPlay(true);
+        }
+
+        return updated;
+      });
     };
 
     ws.onerror = (err) => console.error("WebSocket error:", err);
@@ -51,6 +61,8 @@ export default function CaptionPlayer({ blobUrl, audioPath, videoId }) {
   // ---- Sync captions dynamically ----
   useEffect(() => {
     const interval = setInterval(() => {
+      if (!readyToPlay) return;
+
       let currentTime = 0;
 
       if (isYouTube && playerRef.current?.getCurrentTime) {
@@ -67,25 +79,33 @@ export default function CaptionPlayer({ blobUrl, audioPath, videoId }) {
     }, 250);
 
     return () => clearInterval(interval);
-  }, [segments, isYouTube]);
+  }, [segments, readyToPlay, isYouTube]);
 
-  // ---- YouTube player ready ----
+  // ---- YouTube ready ----
   const onYouTubeReady = (event) => {
     playerRef.current = event.target;
-    playerRef.current.playVideo();
+    // Do not autoplay until buffering is ready
+    if (readyToPlay) {
+      playerRef.current.playVideo();
+    }
   };
 
-  // ---- No media yet ----
-  if (!blobUrl && !audioPath && !videoId)
+  // ---- If buffering, show loader ----
+  if (!readyToPlay) {
     return (
-      <p className="text-gray-400 text-center mt-6">
-        Upload a file or paste a YouTube link to get started.
-      </p>
+      <div className="mt-10 text-center text-[#90a7cb] text-lg">
+        ⏳ Preparing captions...  
+        <br />
+        This will take a moment.
+      </div>
     );
+  }
 
+  // -----------------------------------
+  // ---- PLAYER + CAPTIONS RENDER -----
+  // -----------------------------------
   return (
     <div className="w-full mt-8 flex flex-col items-center">
-      {/* ---- YOUTUBE MODE ---- */}
       {isYouTube ? (
         <div className="relative w-full max-w-[720px] aspect-video bg-black rounded-lg overflow-hidden">
           <YouTube
@@ -93,33 +113,33 @@ export default function CaptionPlayer({ blobUrl, audioPath, videoId }) {
             opts={{
               width: "100%",
               height: "100%",
-              playerVars: { autoplay: 1, controls: 1 },
+              playerVars: { controls: 1, autoplay: 1 },
             }}
             onReady={onYouTubeReady}
             className="absolute inset-0 w-full h-full"
           />
         </div>
       ) : blobUrl ? (
-        /* ---- FILE UPLOAD MODE (VIDEO) ---- */
         <div className="relative w-full max-w-[720px] aspect-video bg-[#101723] rounded-lg overflow-hidden">
           <video
             ref={mediaRef}
             src={blobUrl}
             controls
+            autoPlay
             className="absolute inset-0 w-full h-full object-contain rounded-lg"
           />
         </div>
       ) : (
-        /* ---- FILE UPLOAD MODE (AUDIO) ---- */
         <audio
           ref={mediaRef}
           src={`http://localhost:8000/${audioPath}`}
           controls
+          autoPlay
           className="w-full max-w-[720px]"
         />
       )}
 
-      {/* ---- Captions Display ---- */}
+      {/* CAPTIONS */}
       <div className="mt-4 bg-[#223149] text-white rounded-lg px-6 py-3 text-lg min-h-[56px] w-full max-w-[720px] text-center">
         {currentCaption || "Listening... captions will appear here."}
       </div>
