@@ -1,6 +1,14 @@
 // src/components/InputSelector.jsx
 import React, { useState } from "react";
 
+// 🧠 Helper function: extract YouTube video ID from any format
+function extractYouTubeId(url) {
+  const regex =
+    /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+  const match = url.match(regex);
+  return match ? match[1] : null;
+}
+
 export default function InputSelector({ onReady }) {
   const [mode, setMode] = useState("link");
   const [url, setUrl] = useState("");
@@ -14,6 +22,7 @@ export default function InputSelector({ onReady }) {
 
     try {
       if (mode === "file" && file) {
+        // ✅ File upload flow (unchanged)
         const formData = new FormData();
         formData.append("file", file);
         const res = await fetch("http://localhost:8000/upload", {
@@ -24,23 +33,33 @@ export default function InputSelector({ onReady }) {
 
         if (data.success) {
           const blobUrl = URL.createObjectURL(file);
-          onReady({ blobUrl, audioPath: data.audio_path });
+          onReady({ blobUrl, audioPath: data.audio_path, videoId: null });
           setStatus("Uploaded and ready to play.");
         } else {
           setStatus("Upload failed: " + data.error);
         }
+
       } else if (mode === "link" && url) {
+        // ✅ YouTube link flow
+        const videoId = extractYouTubeId(url);
+        if (!videoId) {
+          setStatus("Invalid YouTube URL. Please check and try again.");
+          return;
+        }
+
         const res = await fetch(
           `http://localhost:8000/fetch?url=${encodeURIComponent(url)}`
         );
         const data = await res.json();
 
         if (data.success) {
-          onReady({ blobUrl: null, audioPath: data.audio_path });
+          // 🆕 Pass videoId along to CaptionPlayer
+          onReady({ blobUrl: null, audioPath: data.audio_path, videoId });
           setStatus("Fetched audio and ready to play.");
         } else {
           setStatus("Fetch failed: " + data.error);
         }
+
       } else {
         setStatus("Please provide valid input.");
       }
@@ -56,6 +75,7 @@ export default function InputSelector({ onReady }) {
         Choose Your Input Method
       </h2>
 
+      {/* Tabs with Animated Indicator */}
       <div className="relative px-4">
         <div className="flex gap-8 border-b border-[#314668] relative">
           <div
@@ -83,11 +103,12 @@ export default function InputSelector({ onReady }) {
         </div>
       </div>
 
+      {/* Input Field Section */}
       <div className="flex flex-wrap items-end gap-4 px-4 py-4">
         {mode === "link" ? (
           <input
             type="text"
-            placeholder="Enter URL"
+            placeholder="Enter YouTube URL"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             className="w-full sm:w-[480px] h-14 bg-[#223149] text-white rounded-lg p-4 placeholder-[#90a7cb]"
@@ -101,6 +122,7 @@ export default function InputSelector({ onReady }) {
         )}
       </div>
 
+      {/* Generate Button */}
       <div className="flex justify-center px-4 py-3">
         <button
           onClick={handleGenerate}
@@ -110,6 +132,7 @@ export default function InputSelector({ onReady }) {
         </button>
       </div>
 
+      {/* Status */}
       {status && (
         <p className="text-center text-[#90a7cb] text-sm mt-2">{status}</p>
       )}
