@@ -4,10 +4,11 @@ import React, { useState } from "react";
 // 🧠 Helper function: extract YouTube video ID from any format
 function extractYouTubeId(url) {
   const regex =
-    /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+    /(?:https?:\/\/)?(?:www\.)?(?:m\.)?(?:youtube\.com\/(?:watch\?.*v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
   const match = url.match(regex);
   return match ? match[1] : null;
 }
+
 
 export default function InputSelector({ onReady }) {
   const [mode, setMode] = useState("link");
